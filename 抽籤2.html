@@ -1,0 +1,303 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>老工程師的靠譜抽獎機 (V2.0 可編輯版)</title>
+    
+    <style>
+        /* CSS 樣式基本不變，只增加新元件的樣式 */
+        body {
+            background-color: #2c3e50;
+            color: #ecf0f1;
+            font-family: 'Microsoft JhengHei', '微軟正黑體', sans-serif;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            margin: 0;
+            padding: 20px 0;
+        }
+
+        .lottery-container {
+            text-align: center;
+            background-color: #34495e;
+            padding: 20px 40px 40px 40px;
+            border-radius: 15px;
+            box-shadow: 0 10px 20px rgba(0,0,0,0.3);
+            width: 90%;
+            max-width: 600px;
+        }
+
+        header h1 {
+            margin: 0;
+            font-size: 2.5em;
+            color: #1abc9c;
+        }
+
+        /* --- 新增的編輯區塊樣式 --- */
+        .settings-container {
+            margin-bottom: 20px;
+        }
+
+        .edit-panel {
+            background-color: #2c3e50;
+            border-radius: 8px;
+            padding: 15px;
+            margin-top: 15px;
+        }
+
+        .edit-panel textarea {
+            width: 95%;
+            height: 150px;
+            background-color: #ecf0f1;
+            border: 2px solid #95a5a6;
+            border-radius: 5px;
+            font-size: 1em;
+            padding: 10px;
+            color: #2c3e50;
+        }
+
+        .edit-panel p {
+            font-size: 0.9em;
+            color: #bdc3c7;
+            margin-top: 0;
+        }
+        
+        .hidden {
+            display: none;
+        }
+        /* --- 編輯區塊樣式結束 --- */
+
+        .display-board {
+            background-color: #2c3e50;
+            border: 3px solid #1abc9c;
+            border-radius: 10px;
+            padding: 30px;
+            margin: 20px 0;
+            min-height: 100px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            overflow: hidden;
+        }
+
+        #winner-display {
+            font-size: 3em;
+            font-weight: bold;
+            transition: all 0.2s ease;
+        }
+        
+        .winner-placeholder {
+            color: #95a5a6;
+            font-size: 1.5em;
+        }
+
+        /* 按鈕共用樣式 */
+        .btn {
+            color: white;
+            border: none;
+            padding: 10px 25px;
+            font-size: 1.2em;
+            border-radius: 50px;
+            cursor: pointer;
+            transition: background-color 0.3s, transform 0.1s;
+            margin: 5px;
+        }
+        
+        #draw-button {
+            background-color: #e74c3c;
+            padding: 15px 40px;
+            font-size: 1.5em;
+            box-shadow: 0 5px #c0392b;
+        }
+        #draw-button:hover { background-color: #c0392b; }
+        #draw-button:active { transform: translateY(2px); box-shadow: 0 3px #c0392b; }
+        #draw-button:disabled { background-color: #95a5a6; cursor: not-allowed; box-shadow: 0 5px #7f8c8d; }
+
+        #edit-list-button { background-color: #3498db; box-shadow: 0 4px #2980b9; }
+        #edit-list-button:hover { background-color: #2980b9; }
+
+        #save-list-button { background-color: #2ecc71; box-shadow: 0 4px #27ae60; }
+        #save-list-button:hover { background-color: #27ae60; }
+
+
+        footer {
+            margin-top: 30px;
+            font-size: 0.9em;
+            color: #95a5a6;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="lottery-container">
+        <header>
+            <h1>抽獎系統 V2.0</h1>
+            <p>可動態修改名單</p>
+        </header>
+
+        <main>
+            <div class="settings-container">
+                <button id="edit-list-button" class="btn">編輯/查看名單</button>
+                <div id="edit-panel" class="edit-panel hidden">
+                    <p>請在此輸入所有參加者的名字，一行一個。</p>
+                    <textarea id="participants-input" placeholder="例如：&#10;陳金城&#10;林美麗&#10;黃大同"></textarea>
+                    <button id="save-list-button" class="btn">儲存名單</button>
+                </div>
+            </div>
+
+            <div class="display-board">
+                <div id="winner-display" class="winner-placeholder">請先設定名單</div>
+            </div>
+            <button id="draw-button" class="btn">開始抽獎！</button>
+        </main>
+
+        <footer>
+            <p>由一位30年經驗的工程師升級改造</p>
+        </footer>
+    </div>
+
+    <script>
+        // --- 預設名單 (只有在使用者第一次使用，且沒有儲存任何名單時才會出現) ---
+        const defaultParticipants = [
+            '陳金城', '林美麗', '黃大同', '張建國', '王淑芬', 
+            '李志明', '劉秀英', '蔡文雄', '吳美玲', '許家豪'
+        ];
+
+        // --- DOM 元件 ---
+        const winnerDisplay = document.getElementById('winner-display');
+        const drawButton = document.getElementById('draw-button');
+        const editListButton = document.getElementById('edit-list-button');
+        const saveListButton = document.getElementById('save-list-button');
+        const editPanel = document.getElementById('edit-panel');
+        const participantsInput = document.getElementById('participants-input');
+        
+        // --- 核心變數 ---
+        let participants = [];
+        let remainingParticipants = [];
+        let intervalId = null;
+        let isDrawing = false;
+        const STORAGE_KEY = 'lottery_participants_list'; // 瀏覽器記事本的鑰匙
+
+        // --- 核心功能函數 ---
+
+        // 1. 載入名單：頁面打開時，優先從瀏覽器的記憶體讀取，如果沒有，就用預設名單
+        function loadParticipants() {
+            const savedList = localStorage.getItem(STORAGE_KEY);
+            if (savedList) {
+                participants = JSON.parse(savedList);
+            } else {
+                participants = [...defaultParticipants];
+            }
+            
+            // 如果名單是空的，也用預設的
+            if (participants.length === 0) {
+                 participants = [...defaultParticipants];
+            }
+
+            participantsInput.value = participants.join('\n');
+            resetLottery();
+        }
+
+        // 2. 儲存名單：當使用者按下儲存按鈕
+        function saveParticipants() {
+            const inputText = participantsInput.value;
+            // 把輸入的文字，根據換行符號切開，變成一個名字陣列
+            // .map(name => name.trim()) 是為了去除每個名字前後多餘的空格
+            // .filter(name => name !== '') 是為了過濾掉空行
+            const newParticipants = inputText.split('\n')
+                                           .map(name => name.trim())
+                                           .filter(name => name !== '');
+
+            if (newParticipants.length === 0) {
+                alert('名單不能是空的！請至少輸入一個名字。');
+                return;
+            }
+
+            participants = newParticipants;
+            // 把新的名單存到瀏覽器的記事本裡 (存成文字格式)
+            localStorage.setItem(STORAGE_KEY, JSON.stringify(participants));
+            
+            alert(`名單已更新！總共有 ${participants.length} 位參加者。`);
+            editPanel.classList.add('hidden'); // 存完後自動收起面板
+            resetLottery();
+        }
+
+        // 3. 重設抽獎機狀態
+        function resetLottery() {
+            remainingParticipants = [...participants];
+            drawButton.disabled = remainingParticipants.length === 0;
+            if (remainingParticipants.length > 0) {
+                winnerDisplay.textContent = '幸運兒是誰？';
+                winnerDisplay.classList.add('winner-placeholder');
+            } else {
+                winnerDisplay.textContent = '請先編輯並儲存名單！';
+                winnerDisplay.classList.add('winner-placeholder');
+            }
+        }
+        
+        // --- 事件監聽 ---
+
+        // 監聽「編輯名單」按鈕，用來顯示/隱藏編輯面板
+        editListButton.addEventListener('click', () => {
+            editPanel.classList.toggle('hidden');
+        });
+
+        // 監聽「儲存名單」按鈕
+        saveListButton.addEventListener('click', saveParticipants);
+
+        // 監聽「開始抽獎」按鈕 (這部分邏輯和前一版差不多)
+        drawButton.addEventListener('click', () => {
+            if (isDrawing || remainingParticipants.length === 0) return;
+
+            isDrawing = true;
+            drawButton.disabled = true;
+            winnerDisplay.classList.remove('winner-placeholder');
+
+            // 滾動效果
+            intervalId = setInterval(() => {
+                const randomIndex = Math.floor(Math.random() * remainingParticipants.length);
+                winnerDisplay.textContent = remainingParticipants[randomIndex];
+            }, 100);
+
+            // 揭曉結果
+            setTimeout(() => {
+                clearInterval(intervalId);
+
+                const winnerIndex = Math.floor(Math.random() * remainingParticipants.length);
+                const winner = remainingParticipants[winnerIndex];
+
+                winnerDisplay.textContent = winner;
+                winnerDisplay.style.transform = 'scale(1.2)';
+                winnerDisplay.style.color = '#f1c40f';
+                
+                // 從「待抽獎」名單中移除中獎者
+                remainingParticipants.splice(winnerIndex, 1);
+                
+                isDrawing = false;
+                
+                // 如果還有剩下的人，就把抽獎按鈕恢復
+                if (remainingParticipants.length > 0) {
+                    drawButton.disabled = false;
+                } else {
+                    // 全部抽完了
+                    setTimeout(() => {
+                         alert("所有人都抽完囉！");
+                    }, 500);
+                }
+
+                setTimeout(() => {
+                    winnerDisplay.style.transform = 'scale(1)';
+                    winnerDisplay.style.color = '';
+                }, 1500);
+
+            }, 3000);
+        });
+
+        // --- 程式入口 ---
+        // 當整個網頁都載入完成後，就自動執行一次 loadParticipants()
+        document.addEventListener('DOMContentLoaded', loadParticipants);
+    </script>
+</body>
+</html>
